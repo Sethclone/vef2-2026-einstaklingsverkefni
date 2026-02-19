@@ -1,0 +1,1 @@
+# vef2-2026-einstaklingsverkefni

@@ -25,7 +25,7 @@ Framendi verður útfærður til að leyfa notenda að byggja söfn og sjá nið
 
 ## Framework og tól
 
-Ég geri ráð fyrir að eftirfarandi framework verði notuð í verkefnið:
+Ég geri ráð fyrir að eftirfarandi framework og api verði notuð í verkefnið:
 
 - Node.js  
 - Hono  

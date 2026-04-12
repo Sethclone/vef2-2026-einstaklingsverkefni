@@ -1,0 +1,27 @@
+import 'dotenv/config'
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import portfolios from './routes/portfolios.js'
+import stocks from './routes/stocks.js'
+
+const app = new Hono()
+
+//CORS middleware for all routes
+app.use('*', cors())
+
+app.get('/api/health', (c) =>
+  c.json({ data: { status: 'ok', service: 'dividend-snowball-api' } })
+)
+
+app.route('/api/portfolios', portfolios)
+app.route('/api/stocks', stocks)
+
+app.get('/', (c) => c.text('Dividend Snowballer API'))
+
+serve({
+  fetch: app.fetch,
+  port: 3000,
+}, (info) => {
+  console.log(`Server is running on http://localhost:${info.port}`)
+})

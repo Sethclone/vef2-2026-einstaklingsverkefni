@@ -1,0 +1,47 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Portfolio {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  holdings    Holding[]
+  simulations Simulation[]
+}
+
+model Holding {
+  id           Int       @id @default(autoincrement())
+  portfolioId  Int
+  symbol       String
+  companyName  String?
+  shares       Float
+  avgCostBasis Float?
+  portfolio    Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Simulation {
+  id                 Int       @id @default(autoincrement())
+  portfolioId        Int
+  years              Int
+  growthRate         Float
+  dividendGrowthRate Float     @default(3)
+  drip               Boolean   @default(true)
+  results            Json
+  portfolio          Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  createdAt          DateTime  @default(now())
+}
+
+
+

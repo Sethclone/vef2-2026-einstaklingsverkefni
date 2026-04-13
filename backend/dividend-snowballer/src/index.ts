@@ -8,7 +8,11 @@ import stocks from './routes/stocks.js'
 const app = new Hono()
 
 //CORS middleware for all routes
-app.use('*', cors())
+app.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+}))
 
 app.get('/api/health', (c) =>
   c.json({ data: { status: 'ok', service: 'dividend-snowball-api' } })

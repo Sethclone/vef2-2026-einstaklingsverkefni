@@ -46,14 +46,16 @@ export default function T212SimulatePage() {
   const [error, setError] = useState<string | null>(null)
   const [loadingSuggested, setLoadingSuggested] = useState(true)
   const [usedSuggested, setUsedSuggested] = useState(false)
+  const [usingFallback, setUsingFallback] = useState(false)
 
   useEffect(() => {
     api.t212.suggestParams()
       .then(s => {
         setParams(p => ({ ...p, growthRate: s.suggestedGrowthRate, dividendGrowthRate: s.suggestedDividendGrowthRate }))
         setUsedSuggested(true)
+        setUsingFallback(s.usingFallback ?? false)
       })
-      .catch(() => { /* silently fall back to defaults */ })
+      .catch(() => { setUsingFallback(true) })
       .finally(() => setLoadingSuggested(false))
   }, [])
 
@@ -100,7 +102,12 @@ export default function T212SimulatePage() {
         <div className="sim-params card">
           <h2>Parameters</h2>
           {loadingSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Estimating rates from your T212 positions…</p>}
-          {!loadingSuggested && usedSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>✦ Rates pre-filled from your holding history. You can adjust them below.</p>}
+          {!loadingSuggested && usingFallback && (
+            <div className="alert alert-info" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+              ⚠ Could not calculate rates from your holding history, using defaults (7% growth, 3% DGR). Adjust manually below.
+            </div>
+          )}
+          {!loadingSuggested && usedSuggested && !usingFallback && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>✦ Rates pre-filled from your holding history. You can adjust them below.</p>}
           <form onSubmit={handleRun} className="form">
             <div className="form-group">
               <label htmlFor="s-years">Time horizon (years)</label>
@@ -139,7 +146,7 @@ export default function T212SimulatePage() {
                 value={params.additionalAnnualInvestment}
                 onChange={e => set('additionalAnnualInvestment', parseFloat(e.target.value))}
               />
-              <span className="form-hint">Extra cash invested each year (optional)</span>
+              <span className="form-hint">Extra cash invested each year (optional, in €)</span>
             </div>
 
             <div className="form-group form-group-check">
@@ -155,8 +162,8 @@ export default function T212SimulatePage() {
 
             {error && <div className="alert alert-error">{error}</div>}
 
-            <button type="submit" className="btn btn-primary btn-full" disabled={running}>
-              {running ? 'Running simulation…' : '▶ Run Simulation'}
+            <button type="submit" className="btn btn-primary btn-full" disabled={running || loadingSuggested}>
+              {loadingSuggested ? 'Loading rates…' : running ? 'Running simulation…' : '▶ Run Simulation'}
             </button>
           </form>
         </div>
@@ -196,7 +203,7 @@ export default function T212SimulatePage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
                     <XAxis dataKey="year" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fill: '#94a3b8' }} />
-                    <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                    <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `€${(v / 1000).toFixed(0)}k`} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ color: '#94a3b8', paddingTop: '8px' }} />
                     <Area type="monotone" dataKey="portfolioValue" name="Portfolio Value" stroke="#60a5fa" fill="url(#gradValue)" strokeWidth={2} dot={false} />
@@ -212,7 +219,7 @@ export default function T212SimulatePage() {
                   <BarChart data={result.yearResults} margin={{ top: 10, right: 20, left: 20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" vertical={false} />
                     <XAxis dataKey="year" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                    <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+                    <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `€${(v / 1000).toFixed(1)}k`} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ color: '#94a3b8', paddingTop: '8px' }} />
                     <Bar dataKey="annualDividends" name="Gross Dividends" fill="#94a3b8" radius={[4, 4, 0, 0]} />

@@ -10,7 +10,7 @@ function getAuthHeader(): string {
   return `Basic ${Buffer.from(`${key}:${secret}`).toString('base64')}`
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
+
 interface CacheEntry { data: unknown; timestamp: number; ttl: number }
 const cache = new Map<string, CacheEntry>()
 const CACHE_TTL = 60 * 60 * 1000            // 1 hour  (positions, recent dividends)
@@ -26,7 +26,7 @@ function setCache(key: string, data: unknown, ttl = CACHE_TTL): void {
   cache.set(key, { data, timestamp: Date.now(), ttl })
 }
 
-// ─── T212 Response Types ──────────────────────────────────────────────────────
+
 interface T212Instrument {
   ticker: string
   name: string
@@ -60,9 +60,6 @@ interface T212DividendItem {
   instrument: T212Instrument
 }
 
-// ─── HTTP helper ──────────────────────────────────────────────────────────────
-// path can be a relative path like /equity/positions
-// OR a nextPagePath like /api/v0/equity/history/dividends?limit=50&cursor=123
 async function t212Fetch(path: string): Promise<unknown> {
   const url = path.startsWith('/api/')
     ? `${SERVER_ROOT}${path}`
@@ -79,14 +76,12 @@ async function t212Fetch(path: string): Promise<unknown> {
   return res.json()
 }
 
-// ─── Positions (all positions cached 1 hr) ────────────────────────────────────
 async function getPositionsMap(): Promise<Map<string, T212Position>> {
   const cacheKey = 'positions:all'
   const cached = getCached<Map<string, T212Position>>(cacheKey)
   if (cached) return cached
 
   const json = await t212Fetch('/equity/positions')
-  // T212 may return { "items": [...] } or a plain array
   const data: T212Position[] = Array.isArray(json) ? json : (json as { items: T212Position[] })?.items ?? []
   const map = new Map<string, T212Position>()
   for (const pos of data) {
@@ -97,7 +92,7 @@ async function getPositionsMap(): Promise<Map<string, T212Position>> {
 }
 
 // ─── Symbol → T212 ticker mapping ─────────────────────────────────────────────
-// Our DB stores symbols like "AAPL". T212 uses "AAPL_US_EQ".
+// DB stores symbols like "AAPL". T212 uses "AAPL_US_EQ".
 // Strategy:
 //   1. Exact match (user may have stored the full ticker)
 //   2. Ticker starts with "SYMBOL_" (covers "AAPL_US_EQ" → "AAPL")
@@ -131,7 +126,6 @@ async function symbolToTicker(symbol: string): Promise<string | null> {
   return null
 }
 
-// ─── Dividend history (paginated, cached 24 hr) ───────────────────────────────
 async function getAllDividends(t212Ticker: string): Promise<T212DividendItem[]> {
   const cacheKey = `dividends-t212:${t212Ticker}`
   const cached = getCached<T212DividendItem[]>(cacheKey)
@@ -151,7 +145,7 @@ async function getAllDividends(t212Ticker: string): Promise<T212DividendItem[]> 
   return items
 }
 
-// ─── Public interface (matches alphaVantage.ts exports) ──────────────────────
+
 
 export interface StockQuote {
   symbol: string
@@ -171,7 +165,7 @@ export interface DividendEntry {
 /**
  * Returns current price from your T212 open position.
  * changePercent = total return since your average purchase price.
- * (T212 doesn't expose day-change data.)
+ * 
  */
 export async function getQuote(symbol: string): Promise<StockQuote> {
   const ticker = await symbolToTicker(symbol)
@@ -203,7 +197,6 @@ export async function getQuote(symbol: string): Promise<StockQuote> {
 
 /**
  * Returns per-share dividend history from your actual T212 dividend payments.
- * Uses grossAmountPerShare (in instrument currency).
  */
 export async function getDividends(symbol: string): Promise<DividendEntry[]> {
   const ticker = await symbolToTicker(symbol)
@@ -211,10 +204,10 @@ export async function getDividends(symbol: string): Promise<DividendEntry[]> {
 
   const items = await getAllDividends(ticker)
   return items
-    .filter(d => d.grossAmountPerShare != null && d.grossAmountPerShare > 0)
+    .filter(d => d.amount != null && d.amount > 0 && d.quantity > 0)
     .map(d => ({
       exDate: d.paidOn,
-      amount: d.grossAmountPerShare,
+      amount: d.amount / d.quantity,  // EUR per share (account currency)
     }))
 }
 
@@ -270,7 +263,7 @@ export async function getDividendGrowthRate(symbol: string): Promise<number> {
  * Annualised price growth rate estimated from your position:
  *   CAGR = (currentPrice / averagePricePaid)^(1/years) − 1
  * Falls back to 7% if the position is too new (<6 months) or data is missing.
- * Note: T212 does not expose historical market price series.
+ * This is a rough estimate based on your actual purchase price and holding period, not market data.
  */
 export async function getStockGrowthRate(symbol: string): Promise<number> {
   const ticker = await symbolToTicker(symbol)
@@ -284,7 +277,7 @@ export async function getStockGrowthRate(symbol: string): Promise<number> {
   const years =
     (Date.now() - new Date(pos.createdAt).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
 
-  if (years < 0.5) return 7  // Too short a holding period for a reliable estimate
+  if (years < 0.5) return 7 // too new to estimate growth, return default
 
   const cagr = (Math.pow(pos.currentPrice / pos.averagePricePaid, 1 / years) - 1) * 100
   const result = Math.round(Math.min(25, Math.max(-10, cagr)) * 100) / 100

@@ -68,36 +68,47 @@ t212Routes.get('/portfolio', async (c) => {
   try {
     const positions = await t212PositionsFetch()
 
-    const items = await Promise.all(
-      positions.map(async (pos) => {
-        const symbol = baseSymbol(pos.instrument.ticker)
-        const countryCode = countryFromTicker(pos.instrument.ticker) ?? 'US'
-        const dividendTaxRate = getTaxRate(countryCode)
-        const annualDividend = await t212.getAnnualDividend(symbol).catch(() => 0)
+    const items: {
+      ticker: string; symbol: string; companyName: string; shares: number
+      avgCostBasis: number; currentPrice: number; currentValue: number
+      unrealizedPL: number; unrealizedPLPct: number
+      annualDividendPerShare: number; annualDividendTotal: number
+      dividendYield: number; dividendTaxRate: number; countryCode: string
+    }[] = []
 
-        const currentValue = pos.quantity * pos.currentPrice
-        const totalCost = pos.quantity * pos.averagePricePaid
-        const unrealizedPL = currentValue - totalCost
-        const unrealizedPLPct = totalCost > 0 ? (unrealizedPL / totalCost) * 100 : 0
+    for (const pos of positions) {
+      const symbol = baseSymbol(pos.instrument.ticker)
+      const countryCode = countryFromTicker(pos.instrument.ticker) ?? 'US'
+      const dividendTaxRate = getTaxRate(countryCode)
+      const annualDividend = await t212.getAnnualDividend(symbol).catch(() => 0)
 
-        return {
-          ticker: pos.instrument.ticker,
-          symbol,
-          companyName: pos.instrument?.name ?? symbol,
-          shares: pos.quantity,
-          avgCostBasis: pos.averagePricePaid,
-          currentPrice: pos.currentPrice,
-          currentValue: Math.round(currentValue * 100) / 100,
-          unrealizedPL: Math.round(unrealizedPL * 100) / 100,
-          unrealizedPLPct: Math.round(unrealizedPLPct * 100) / 100,
-          annualDividendPerShare: annualDividend,
-          annualDividendTotal: Math.round(annualDividend * pos.quantity * 100) / 100,
-          dividendYield: pos.currentPrice > 0 ? Math.round((annualDividend / pos.currentPrice) * 10000) / 100 : 0,
-          dividendTaxRate,
-          countryCode,
-        }
+      // walletImpact is already in account currency (EUR) — handles GBX, USD, etc.
+      const currentValueEUR = pos.walletImpact?.currentValue ?? pos.quantity * pos.currentPrice
+      const totalCostEUR = pos.walletImpact?.totalCost ?? pos.quantity * pos.averagePricePaid
+      const unrealizedPL = pos.walletImpact?.unrealizedProfitLoss ?? (currentValueEUR - totalCostEUR)
+      const unrealizedPLPct = totalCostEUR > 0 ? (unrealizedPL / totalCostEUR) * 100 : 0
+      const currentPriceEUR = pos.quantity > 0 ? currentValueEUR / pos.quantity : pos.currentPrice
+      const avgCostBasisEUR = pos.quantity > 0 ? totalCostEUR / pos.quantity : pos.averagePricePaid
+
+      items.push({
+        ticker: pos.instrument.ticker,
+        symbol,
+        companyName: pos.instrument?.name ?? symbol,
+        shares: pos.quantity,
+        avgCostBasis: Math.round(avgCostBasisEUR * 100) / 100,
+        currentPrice: Math.round(currentPriceEUR * 100) / 100,
+        currentValue: Math.round(currentValueEUR * 100) / 100,
+        unrealizedPL: Math.round(unrealizedPL * 100) / 100,
+        unrealizedPLPct: Math.round(unrealizedPLPct * 100) / 100,
+        annualDividendPerShare: Math.round(annualDividend * 100) / 100,
+        annualDividendTotal: Math.round(annualDividend * pos.quantity * 100) / 100,
+        dividendYield: currentPriceEUR > 0 ? Math.round((annualDividend / currentPriceEUR) * 10000) / 100 : 0,
+        dividendTaxRate,
+        countryCode,
       })
-    )
+      // T212 rate limit: 1 req/s
+      await new Promise(r => setTimeout(r, 1100))
+    }
 
     const totalValue = items.reduce((s, i) => s + i.currentValue, 0)
     const totalCost = items.reduce((s, i) => s + i.avgCostBasis * i.shares, 0)
@@ -125,20 +136,25 @@ t212Routes.get('/suggested-params', async (c) => {
       return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
     }
 
-    const results = await Promise.allSettled(
-      positions.map(async (pos) => {
-        const symbol = baseSymbol(pos.instrument.ticker)
+    const results: { gr: number; dgr: number }[] = []
+    for (const pos of positions) {
+      const symbol = baseSymbol(pos.instrument.ticker)
+      try {
         const [gr, dgr] = await Promise.all([
           t212.getStockGrowthRate(symbol),
           t212.getDividendGrowthRate(symbol),
         ])
-        return { gr, dgr }
-      })
-    )
+        results.push({ gr, dgr })
+      } catch {
+        // skip this position on error
+      }
+      // T212 rate limit: 1 req/s — wait between positions
+      await new Promise(r => setTimeout(r, 1100))
+    }
 
-    const valid = results.filter(r => r.status === 'fulfilled').map(r => (r as PromiseFulfilledResult<{ gr: number; dgr: number }>).value)
+    const valid = results
     if (valid.length === 0) {
-      return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
+      return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3, usingFallback: true } })
     }
 
     const avgGr = valid.reduce((s, v) => s + v.gr, 0) / valid.length
@@ -148,6 +164,7 @@ t212Routes.get('/suggested-params', async (c) => {
       data: {
         suggestedGrowthRate: Math.round(avgGr * 100) / 100,
         suggestedDividendGrowthRate: Math.round(avgDgr * 100) / 100,
+        usingFallback: false,
       },
     })
   } catch (err) {
@@ -176,22 +193,25 @@ t212Routes.post('/simulate', async (c) => {
     const positions = await t212PositionsFetch()
     if (positions.length === 0) return c.json({ error: 'No T212 positions found' }, 400)
 
-    // Build holdings array with annual dividend per share
-    const holdingData = await Promise.all(
-      positions.map(async (pos) => {
-        const symbol = baseSymbol(pos.instrument.ticker)
-        const countryCode = countryFromTicker(pos.instrument.ticker) ?? 'US'
-        const annualDividendPerShare = await t212.getAnnualDividend(symbol).catch(() => 0)
-        return {
-          symbol,
-          shares: pos.quantity,
-          currentPrice: pos.currentPrice,
-          annualDividendPerShare,
-          countryCode,
-          value: pos.quantity * pos.currentPrice,
-        }
+    // Build holdings array with annual dividend per share (sequential to avoid rate limits)
+    const holdingData: { symbol: string; shares: number; currentPrice: number; annualDividendPerShare: number; countryCode: string; value: number }[] = []
+    for (const pos of positions) {
+      const symbol = baseSymbol(pos.instrument.ticker)
+      const countryCode = countryFromTicker(pos.instrument.ticker) ?? 'US'
+      const annualDividendPerShare = await t212.getAnnualDividend(symbol).catch(() => 0)
+      // Use walletImpact for EUR-denominated prices
+      const currentValueEUR = pos.walletImpact?.currentValue ?? pos.quantity * pos.currentPrice
+      const currentPriceEUR = pos.quantity > 0 ? currentValueEUR / pos.quantity : pos.currentPrice
+      holdingData.push({
+        symbol,
+        shares: pos.quantity,
+        currentPrice: currentPriceEUR,
+        annualDividendPerShare,
+        countryCode,
+        value: currentValueEUR,
       })
-    )
+      await new Promise(r => setTimeout(r, 1100))
+    }
 
     // Weighted-average dividend tax rate across all positions
     const totalValue = holdingData.reduce((s, h) => s + h.value, 0)

@@ -55,6 +55,7 @@ export interface YearResult {
 export interface SuggestedParams {
   suggestedGrowthRate: number
   suggestedDividendGrowthRate: number
+  usingFallback?: boolean
 }
 
 export interface SimulationResult {

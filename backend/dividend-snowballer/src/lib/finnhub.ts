@@ -114,13 +114,10 @@ export async function getQuote(symbol: string): Promise<StockQuote> {
 }
 
 export async function getDividends(_symbol: string): Promise<DividendEntry[]> {
-  // Finnhub free tier does not support /stock/dividend (premium only).
-  // Historical dividend entries are not available; callers should use
-  // getAnnualDividend / getDividendGrowthRate which use /stock/metric instead.
+
   return []
 }
 
-// ─── Internal: basic financials via /stock/metric (free tier) ────────────────
 async function getMetrics(symbol: string): Promise<FinnhubMetric['metric']> {
   const cacheKey = `metric:${symbol}`
   const cached = getCached<FinnhubMetric['metric']>(cacheKey)
@@ -165,7 +162,7 @@ export async function getStockGrowthRate(symbol: string): Promise<number> {
       to: String(to),
     })
   } catch {
-    // Candle endpoint may be premium — fall back to default
+
     setCache(cacheKey, 7, LONG_CACHE_TTL)
     return 7
   }
@@ -175,7 +172,7 @@ export async function getStockGrowthRate(symbol: string): Promise<number> {
     return 7
   }
 
-  // Drop partial first month (same fix as alphaVantage.ts)
+
   const closes = data.c.length > 12 ? data.c.slice(1) : data.c
   const first = closes[0]
   const last = closes[closes.length - 1]

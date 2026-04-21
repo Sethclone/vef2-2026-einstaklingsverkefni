@@ -37,7 +37,7 @@ export default function T212PortfolioPage() {
       <div className="page-header">
         <div>
           <h1>My Portfolio</h1>
-          <p className="text-muted">Live holdings from your Trading 212 account</p>
+
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/t212/simulate')}>
           Simulate Returns →

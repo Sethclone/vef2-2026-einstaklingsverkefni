@@ -12,12 +12,14 @@ export interface SimulationInput {
   dividendGrowthRate: number // annual dividend per share growth, e.g. 3 for 3%
   drip: boolean              // dividend reinvestment
   additionalAnnualInvestment?: number // optional extra cash per year
+  dividendTaxRate?: number   // withholding tax on dividends, e.g. 0.15 for 15%
 }
 
 export interface YearResult {
   year: number
   portfolioValue: number
   annualDividends: number
+  afterTaxDividends: number
   cumulativeDividends: number
   totalShares: number
   dividendYield: number
@@ -32,7 +34,7 @@ export interface SimulationResult {
 }
 
 export function runSimulation(input: SimulationInput): SimulationResult {
-  const { holdings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment = 0 } = input
+  const { holdings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment = 0, dividendTaxRate = 0 } = input
 
   const growthFactor = 1 + growthRate / 100
   const dgrFactor = 1 + dividendGrowthRate / 100
@@ -57,14 +59,15 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 
     //Calculate dividends earned this year (on shares held at start of year)
     const annualDividends = shares.reduce((sum, s, i) => sum + s * divRates[i], 0)
+    const afterTaxDividends = annualDividends * (1 - dividendTaxRate)
 
-    //DRIP: reinvest dividends proportionally
-    if (drip && annualDividends > 0) {
+    //DRIP: reinvest after-tax dividends proportionally
+    if (drip && afterTaxDividends > 0) {
       const totalVal = shares.reduce((sum, s, i) => sum + s * prices[i], 0)
       if (totalVal > 0) {
         shares = shares.map((s, i) => {
           const weight = (s * prices[i]) / totalVal
-          return s + (annualDividends * weight) / prices[i]
+          return s + (afterTaxDividends * weight) / prices[i]
         })
       }
     }
@@ -80,7 +83,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
       }
     }
 
-    cumulativeDividends += annualDividends
+    cumulativeDividends += afterTaxDividends
 
     const portfolioValue = shares.reduce((sum, s, i) => sum + s * prices[i], 0)
     const totalShares = shares.reduce((sum, s) => sum + s, 0)
@@ -90,6 +93,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
       year,
       portfolioValue: Math.round(portfolioValue * 100) / 100,
       annualDividends: Math.round(annualDividends * 100) / 100,
+      afterTaxDividends: Math.round(afterTaxDividends * 100) / 100,
       cumulativeDividends: Math.round(cumulativeDividends * 100) / 100,
       totalShares: Math.round(totalShares * 10000) / 10000,
       dividendYield: Math.round(dividendYield * 100) / 100,

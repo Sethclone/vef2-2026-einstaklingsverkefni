@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   AreaChart, Area, BarChart, Bar,
@@ -13,6 +13,7 @@ const DEFAULT_PARAMS: SimulationParams = {
   dividendGrowthRate: 3,
   drip: true,
   additionalAnnualInvestment: 0,
+  dividendTaxRate: 15,
 }
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
@@ -48,6 +49,18 @@ export default function SimulatePage() {
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadingSuggested, setLoadingSuggested] = useState(true)
+  const [usedSuggested, setUsedSuggested] = useState(false)
+
+  useEffect(() => {
+    api.suggestParams(portfolioId)
+      .then(s => {
+        setParams(p => ({ ...p, growthRate: s.suggestedGrowthRate, dividendGrowthRate: s.suggestedDividendGrowthRate }))
+        setUsedSuggested(true)
+      })
+      .catch(() => { /* silently fall back to defaults */ })
+      .finally(() => setLoadingSuggested(false))
+  }, [portfolioId])
 
   const set = <K extends keyof SimulationParams>(key: K, value: SimulationParams[K]) =>
     setParams(p => ({ ...p, [key]: value }))
@@ -72,7 +85,7 @@ export default function SimulatePage() {
       <div className="page-header">
         <div>
           <div className="breadcrumb">
-            <Link to="/">Portfolios</Link> / <Link to={`/portfolio/${portfolioId}`}>Portfolio</Link> / Simulate
+            <Link to="/sandbox">Sandbox</Link> / <Link to={`/sandbox/portfolio/${portfolioId}`}>Portfolio</Link> / Simulate
           </div>
           <h1>Snowball Simulator</h1>
           <p className="text-muted">Set assumptions and see how your portfolio could grow with dividend reinvestment.</p>
@@ -83,6 +96,8 @@ export default function SimulatePage() {
         {/* Parameters form */}
         <div className="sim-params card">
           <h2>Parameters</h2>
+          {loadingSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Estimating rates from historical data…</p>}
+          {!loadingSuggested && usedSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>✦ Rates pre-filled from historical data. You can adjust them below.</p>}
           <form onSubmit={handleRun} className="form">
             <div className="form-group">
               <label htmlFor="s-years">Time horizon (years)</label>
@@ -97,7 +112,7 @@ export default function SimulatePage() {
             <div className="form-group">
               <label htmlFor="s-growth">Expected annual price growth (%)</label>
               <input
-                id="s-growth" type="number" min={-20} max={50} step={0.1}
+                id="s-growth" type="number" min={-20} max={50} step={0.01}
                 value={params.growthRate}
                 onChange={e => set('growthRate', parseFloat(e.target.value))}
               />
@@ -107,7 +122,7 @@ export default function SimulatePage() {
             <div className="form-group">
               <label htmlFor="s-dgr">Expected dividend growth rate (%)</label>
               <input
-                id="s-dgr" type="number" min={0} max={30} step={0.1}
+                id="s-dgr" type="number" min={0} max={30} step={0.01}
                 value={params.dividendGrowthRate}
                 onChange={e => set('dividendGrowthRate', parseFloat(e.target.value))}
               />
@@ -122,6 +137,16 @@ export default function SimulatePage() {
                 onChange={e => set('additionalAnnualInvestment', parseFloat(e.target.value))}
               />
               <span className="form-hint">Extra cash invested each year (optional)</span>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="s-tax">Dividend withholding tax (%)</label>
+              <input
+                id="s-tax" type="number" min={0} max={50} step={0.01}
+                value={params.dividendTaxRate ?? 15}
+                onChange={e => set('dividendTaxRate', parseFloat(e.target.value))}
+              />
+              <span className="form-hint">e.g. 15% for US stocks (W-8BEN), 0% if exempt</span>
             </div>
 
             <div className="form-group form-group-check">
@@ -157,7 +182,7 @@ export default function SimulatePage() {
               <div className="stats-row four-col">
                 <StatCard label="Initial Value" value={formatCurrency(result.initialValue)} />
                 <StatCard label="Final Value" value={formatCurrency(result.finalValue)} accent />
-                <StatCard label="Total Dividends" value={formatCurrency(result.totalDividendsEarned)} sub="earned over period" />
+                <StatCard label="After-Tax Dividends" value={formatCurrency(result.totalDividendsEarned)} sub="earned over period" />
                 <StatCard label="Total Return" value={formatPercent(result.totalReturn, 1)} sub={`over ${params.years} years`} accent={result.totalReturn > 0} />
               </div>
 
@@ -196,7 +221,8 @@ export default function SimulatePage() {
                     <XAxis dataKey="year" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
                     <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="annualDividends" name="Annual Dividends" fill="#4ade80" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="annualDividends" name="Gross Dividends" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="afterTaxDividends" name="After-Tax Dividends" fill="#4ade80" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -210,7 +236,8 @@ export default function SimulatePage() {
                       <tr>
                         <th>Year</th>
                         <th className="num">Portfolio Value</th>
-                        <th className="num">Annual Dividends</th>
+                        <th className="num">Gross Dividends</th>
+                        <th className="num">After-Tax Divs</th>
                         <th className="num">Cumulative Dividends</th>
                         <th className="num">Dividend Yield</th>
                         <th className="num">Total Shares</th>
@@ -221,7 +248,8 @@ export default function SimulatePage() {
                         <tr key={r.year}>
                           <td>{r.year}</td>
                           <td className="num">{formatCurrency(r.portfolioValue)}</td>
-                          <td className="num positive">{formatCurrency(r.annualDividends)}</td>
+                          <td className="num">{formatCurrency(r.annualDividends)}</td>
+                          <td className="num positive">{formatCurrency(r.afterTaxDividends)}</td>
                           <td className="num">{formatCurrency(r.cumulativeDividends)}</td>
                           <td className="num">{r.dividendYield.toFixed(2)}%</td>
                           <td className="num">{r.totalShares.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>

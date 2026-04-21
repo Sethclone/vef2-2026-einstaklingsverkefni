@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getQuote, getDividends, getAnnualDividend } from '../lib/alphaVantage.js'
+import { getQuote, getDividends, getAnnualDividend } from '../lib/finnhub.js'
 
 const stocks = new Hono()
 

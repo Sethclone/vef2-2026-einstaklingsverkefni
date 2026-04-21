@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { prisma } from '../db/prisma.js'
-import { getQuote, getAnnualDividend } from '../lib/alphaVantage.js'
+import { getQuote, getAnnualDividend, getDividendGrowthRate, getStockGrowthRate } from '../lib/finnhub.js'
 import { runSimulation } from '../lib/simulation.js'
 
 const portfolios = new Hono()
@@ -131,6 +131,39 @@ portfolios.delete('/:id/holdings/:hid', async (c) => {
 
 // ─── Simulation ───────────────────────────────────────────────────────────────
 
+// GET /api/portfolios/:id/suggested-params
+// Returns portfolio-weighted average growth & dividend growth rates from historical data.
+portfolios.get('/:id/suggested-params', async (c) => {
+  const portfolioId = parseInt(c.req.param('id'))
+  if (isNaN(portfolioId)) return c.json({ error: 'invalid portfolio id' }, 400)
+
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { id: portfolioId },
+    include: { holdings: true },
+  })
+  if (!portfolio) return c.json({ error: 'portfolio not found' }, 404)
+  if (portfolio.holdings.length === 0) return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
+
+  const results = await Promise.allSettled(
+    portfolio.holdings.map(async h => ({
+      growthRate: await getStockGrowthRate(h.symbol),
+      dividendGrowthRate: await getDividendGrowthRate(h.symbol),
+    }))
+  )
+
+  const fulfilled = results
+    .filter((r): r is PromiseFulfilledResult<{ growthRate: number; dividendGrowthRate: number }> => r.status === 'fulfilled')
+    .map(r => r.value)
+
+  if (fulfilled.length === 0) return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
+
+  const avg = (arr: number[]) => Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10
+  const suggestedGrowthRate = avg(fulfilled.map(r => r.growthRate))
+  const suggestedDividendGrowthRate = avg(fulfilled.map(r => r.dividendGrowthRate))
+
+  return c.json({ data: { suggestedGrowthRate, suggestedDividendGrowthRate } })
+})
+
 // POST /api/portfolios/:id/simulate
 portfolios.post('/:id/simulate', async (c) => {
   const portfolioId = parseInt(c.req.param('id'))
@@ -145,7 +178,7 @@ portfolios.post('/:id/simulate', async (c) => {
 
   const body = await c.req.json<{
     years?: number; growthRate?: number; dividendGrowthRate?: number;
-    drip?: boolean; additionalAnnualInvestment?: number
+    drip?: boolean; additionalAnnualInvestment?: number; dividendTaxRate?: number
   }>()
 
   const years = Math.round(Number(body.years ?? 10))
@@ -153,6 +186,7 @@ portfolios.post('/:id/simulate', async (c) => {
   const dividendGrowthRate = Number(body.dividendGrowthRate ?? 3)
   const drip = body.drip !== false
   const additionalAnnualInvestment = Number(body.additionalAnnualInvestment ?? 0)
+  const dividendTaxRate = typeof body.dividendTaxRate === 'number' ? body.dividendTaxRate / 100 : 0
 
   if (years < 1 || years > 50) return c.json({ error: 'years must be between 1 and 50' }, 400)
   if (growthRate < -20 || growthRate > 50) return c.json({ error: 'growthRate must be between -20 and 50' }, 400)
@@ -173,11 +207,18 @@ portfolios.post('/:id/simulate', async (c) => {
     .filter((r): r is PromiseFulfilledResult<EnrichedHolding> => r.status === 'fulfilled')
     .map(r => r.value)
 
+  // Log any failures so they're visible in the server console
+  fetched.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[simulate] Failed to fetch data for ${portfolio.holdings[i]?.symbol}:`, r.reason)
+    }
+  })
+
   if (enrichedHoldings.length === 0) {
     return c.json({ error: 'Could not fetch market data for any holdings. Check your API key or try again later.' }, 502)
   }
 
-  const results = runSimulation({ holdings: enrichedHoldings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment })
+  const results = runSimulation({ holdings: enrichedHoldings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment, dividendTaxRate })
 
   const sim = await prisma.simulation.create({
     data: { portfolioId, years, growthRate, dividendGrowthRate, drip, results: results as object },

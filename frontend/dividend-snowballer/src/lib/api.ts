@@ -1,4 +1,4 @@
-import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote } from '../types'
+import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote, SuggestedParams, T212Portfolio, T212SimulationResult, AccountDividendSummary } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
@@ -59,6 +59,23 @@ export const api = {
     quote: (symbol: string) => request<StockQuote>(`/api/stocks/${symbol}/quote`),
   },
 
+  t212: {
+    portfolio: () => request<T212Portfolio>('/api/t212/portfolio'),
+
+    dividends: () => request<AccountDividendSummary>('/api/t212/dividends'),
+
+    suggestParams: () => request<SuggestedParams>('/api/t212/suggested-params'),
+
+    simulate: (params: Omit<SimulationParams, never>) =>
+      request<T212SimulationResult>('/api/t212/simulate', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  },
+
+  suggestParams: (portfolioId: number) =>
+    request<SuggestedParams>(`/api/portfolios/${portfolioId}/suggested-params`),
+
   simulate: (portfolioId: number, params: SimulationParams) =>
     request<SimulationResult>(`/api/portfolios/${portfolioId}/simulate`, {
       method: 'POST',
@@ -67,10 +84,11 @@ export const api = {
 }
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('de-DE', {
     style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value)
 }
 

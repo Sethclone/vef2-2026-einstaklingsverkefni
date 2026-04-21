@@ -3,6 +3,19 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { api, formatCurrency } from '../lib/api'
 import Modal from '../components/Modal'
 import type { Portfolio, Holding, StockQuote } from '../types'
+import { useSortable } from '../hooks/useSortable'
+
+type HCol = 'symbol' | 'companyName' | 'shares' | 'price' | 'value' | 'avgCostBasis' | 'changePercent'
+
+function SortTh({ col, ind, toggle, className, children }: {
+  col: HCol; ind: (k: HCol) => string; toggle: (k: HCol) => void; className?: string; children?: React.ReactNode
+}) {
+  return (
+    <th className={className} onClick={() => toggle(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {children}{ind(col)}
+    </th>
+  )
+}
 
 export default function PortfolioDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -122,7 +135,7 @@ export default function PortfolioDetailPage() {
     if (!confirm(`Delete portfolio "${portfolio?.name}"? This cannot be undone.`)) return
     try {
       await api.portfolios.delete(portfolioId)
-      navigate('/')
+      navigate('/sandbox')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete portfolio')
     }
@@ -133,6 +146,18 @@ export default function PortfolioDetailPage() {
     return sum + (q ? q.price * h.shares : 0)
   }, 0) ?? 0
 
+  // Sortable holdings — must be called before any early returns
+  const { sorted: sortedHoldings, indicator: hInd, toggle: hToggle } = useSortable<HCol, Holding>(
+    portfolio?.holdings ?? [],
+    (h, key) => {
+      const q = quotes[h.symbol]
+      if (key === 'price') return q?.price ?? null
+      if (key === 'value') return q ? q.price * h.shares : null
+      if (key === 'changePercent') return q?.changePercent ?? null
+      return (h as unknown as Record<string, string | number>)[key] ?? null
+    },
+  )
+
   if (loading) return <div className="page"><div className="loading">Loading…</div></div>
   if (error && !portfolio) return <div className="page"><div className="alert alert-error">{error}<br /><Link to="/">← Back</Link></div></div>
 
@@ -140,14 +165,14 @@ export default function PortfolioDetailPage() {
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="breadcrumb"><Link to="/">Portfolios</Link> / {portfolio?.name}</div>
+          <div className="breadcrumb"><Link to="/sandbox">Sandbox</Link> / {portfolio?.name}</div>
           <h1>{portfolio?.name}</h1>
           {portfolio?.description && <p className="text-muted">{portfolio.description}</p>}
         </div>
         <div className="header-actions">
           <button className="btn btn-ghost btn-sm" onClick={handleDeletePortfolio}>Delete Portfolio</button>
           {(portfolio?.holdings?.length ?? 0) > 0 && (
-            <Link to={`/portfolio/${portfolioId}/simulate`} className="btn btn-primary">
+            <Link to={`/sandbox/portfolio/${portfolioId}/simulate`} className="btn btn-primary">
               Run Simulation →
             </Link>
           )}
@@ -188,18 +213,18 @@ export default function PortfolioDetailPage() {
             <table className="holdings-table">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th>Company</th>
-                  <th className="num">Shares</th>
-                  <th className="num">Price</th>
-                  <th className="num">Value</th>
-                  <th className="num">Avg Cost</th>
-                  <th className="num">Change</th>
+                  <SortTh col="symbol" ind={hInd} toggle={hToggle}>Symbol</SortTh>
+                  <SortTh col="companyName" ind={hInd} toggle={hToggle}>Company</SortTh>
+                  <SortTh col="shares" ind={hInd} toggle={hToggle} className="num">Shares</SortTh>
+                  <SortTh col="price" ind={hInd} toggle={hToggle} className="num">Price</SortTh>
+                  <SortTh col="value" ind={hInd} toggle={hToggle} className="num">Value</SortTh>
+                  <SortTh col="avgCostBasis" ind={hInd} toggle={hToggle} className="num">Avg Cost</SortTh>
+                  <SortTh col="changePercent" ind={hInd} toggle={hToggle} className="num">Change</SortTh>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {portfolio?.holdings?.map(h => {
+                {sortedHoldings.map(h => {
                   const q = quotes[h.symbol]
                   const value = q ? q.price * h.shares : null
                   return (

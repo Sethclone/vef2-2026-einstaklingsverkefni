@@ -6,7 +6,8 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
-  const isHome = location.pathname === '/'
+  const isT212 = location.pathname === '/' || location.pathname.startsWith('/t212')
+  const isSandbox = location.pathname.startsWith('/sandbox')
 
   return (
     <div className="app-shell">
@@ -16,11 +17,10 @@ export default function Layout({ children }: LayoutProps) {
             <span className="brand-icon">❄</span>
             Dividend Snowballer
           </Link>
-          {!isHome && (
-            <nav className="breadcrumb-nav">
-              <Link to="/">Portfolios</Link>
-            </nav>
-          )}
+          <nav className="breadcrumb-nav">
+            <Link to="/" className={isT212 ? 'nav-active' : ''}>My Portfolio</Link>
+            <Link to="/sandbox" className={isSandbox ? 'nav-active' : ''}>Sandbox</Link>
+          </nav>
         </div>
       </header>
       <main className="main-content">{children}</main>

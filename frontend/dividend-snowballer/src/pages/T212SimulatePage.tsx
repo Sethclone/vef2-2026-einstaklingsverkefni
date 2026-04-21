@@ -122,7 +122,7 @@ export default function T212SimulatePage() {
             <div className="form-group">
               <label htmlFor="s-growth">Expected annual price growth (%)</label>
               <input
-                id="s-growth" type="number" min={-20} max={50} step={0.1}
+                id="s-growth" type="number" min={-20} max={50} step={0.01}
                 value={params.growthRate}
                 onChange={e => set('growthRate', parseFloat(e.target.value))}
               />
@@ -132,7 +132,7 @@ export default function T212SimulatePage() {
             <div className="form-group">
               <label htmlFor="s-dgr">Expected dividend growth rate (%)</label>
               <input
-                id="s-dgr" type="number" min={0} max={30} step={0.1}
+                id="s-dgr" type="number" min={0} max={30} step={0.01}
                 value={params.dividendGrowthRate}
                 onChange={e => set('dividendGrowthRate', parseFloat(e.target.value))}
               />

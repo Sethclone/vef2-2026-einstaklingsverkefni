@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, formatCurrency, formatPercent } from '../lib/api'
-import type { T212Portfolio, T212PortfolioItem } from '../types'
+import type { T212Portfolio, T212PortfolioItem, AccountDividendSummary } from '../types'
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
@@ -15,6 +15,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
 
 export default function T212PortfolioPage() {
   const [portfolio, setPortfolio] = useState<T212Portfolio | null>(null)
+  const [dividends, setDividends] = useState<AccountDividendSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -24,6 +25,10 @@ export default function T212PortfolioPage() {
       .then(setPortfolio)
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load portfolio'))
       .finally(() => setLoading(false))
+
+    api.t212.dividends()
+      .then(setDividends)
+      .catch(() => { /* ignore dividend loading errors */ })
   }, [])
 
   if (loading) return <div className="page"><div className="loading">Loading your T212 portfolio…</div></div>
@@ -52,6 +57,12 @@ export default function T212PortfolioPage() {
           value={`${plSign}${formatCurrency(portfolio.totalUnrealizedPL)}`}
           accent={portfolio.totalUnrealizedPL >= 0}
         />
+        {dividends && (
+          <>
+            <StatCard label="Dividends This Year" value={formatCurrency(dividends.paidThisYear)} accent={dividends.paidThisYear > 0} />
+            <StatCard label="Total Dividends Received" value={formatCurrency(dividends.totalPaid)} />
+          </>
+        )}
         <StatCard label="Holdings" value={String(portfolio.positions.length)} />
       </div>
 
@@ -94,6 +105,36 @@ export default function T212PortfolioPage() {
           </tbody>
         </table>
       </div>
+
+      {dividends && dividends.recentPayments.length > 0 && (
+        <div style={{ marginTop: '2rem' }}>
+          <h2 style={{ marginBottom: '1rem' }}>Dividend Payment History</h2>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Company</th>
+                  <th className="text-right">Qty</th>
+                  <th className="text-right">Per Share</th>
+                  <th className="text-right">Total Received</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dividends.recentPayments.map((p, i) => (
+                  <tr key={i}>
+                    <td>{new Date(p.paidOn).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                    <td>{p.companyName}</td>
+                    <td className="text-right">{p.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                    <td className="text-right">{formatCurrency(p.grossAmountPerShare)}</td>
+                    <td className="text-right positive">{formatCurrency(p.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

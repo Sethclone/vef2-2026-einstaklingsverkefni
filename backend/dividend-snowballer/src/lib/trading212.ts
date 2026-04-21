@@ -146,6 +146,69 @@ async function getAllDividends(t212Ticker: string): Promise<T212DividendItem[]> 
 }
 
 
+export interface AccountDividendPayment {
+  ticker: string
+  companyName: string
+  paidOn: string           // ISO date
+  amount: number           // total EUR received
+  grossAmountPerShare: number
+  quantity: number
+}
+
+export interface AccountDividendSummary {
+  totalPaid: number
+  paidThisYear: number
+  recentPayments: AccountDividendPayment[]
+}
+
+export async function getAccountDividends(): Promise<AccountDividendSummary> {
+  const cacheKey = 'account-dividends:all'
+  const cached = getCached<AccountDividendSummary>(cacheKey)
+  if (cached) return cached
+
+  const items: T212DividendItem[] = []
+  let path: string | null = '/equity/history/dividends?limit=50'
+
+  while (path) {
+    const data = await t212Fetch(path) as { items: T212DividendItem[]; nextPagePath: string | null }
+    items.push(...(data.items ?? []))
+    path = data.nextPagePath ?? null
+  }
+
+  const thisYear = new Date().getFullYear()
+  let totalPaid = 0
+  let paidThisYear = 0
+
+  const recentPayments: AccountDividendPayment[] = []
+
+  for (const d of items) {
+    if (d.amount == null || d.amount <= 0) continue
+    totalPaid += d.amount
+    if (new Date(d.paidOn).getFullYear() === thisYear) {
+      paidThisYear += d.amount
+    }
+    recentPayments.push({
+      ticker: d.ticker ?? d.instrument?.ticker ?? '',
+      companyName: d.instrument?.name ?? d.ticker ?? '',
+      paidOn: d.paidOn,
+      amount: d.amount,
+      grossAmountPerShare: d.grossAmountPerShare ?? 0,
+      quantity: d.quantity ?? 0,
+    })
+  }
+
+  // Sort by most recent first
+  recentPayments.sort((a, b) => new Date(b.paidOn).getTime() - new Date(a.paidOn).getTime())
+
+  const summary: AccountDividendSummary = {
+    totalPaid: Math.round(totalPaid * 100) / 100,
+    paidThisYear: Math.round(paidThisYear * 100) / 100,
+    recentPayments: recentPayments.slice(0, 50),
+  }
+
+  setCache(cacheKey, summary)
+  return summary
+}
 
 export interface StockQuote {
   symbol: string

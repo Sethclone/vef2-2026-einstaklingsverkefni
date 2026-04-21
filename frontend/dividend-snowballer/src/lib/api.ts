@@ -1,4 +1,4 @@
-import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote, SuggestedParams, T212Portfolio, T212SimulationResult } from '../types'
+import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote, SuggestedParams, T212Portfolio, T212SimulationResult, AccountDividendSummary } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
@@ -61,6 +61,8 @@ export const api = {
 
   t212: {
     portfolio: () => request<T212Portfolio>('/api/t212/portfolio'),
+
+    dividends: () => request<AccountDividendSummary>('/api/t212/dividends'),
 
     suggestParams: () => request<SuggestedParams>('/api/t212/suggested-params'),
 

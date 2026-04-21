@@ -100,3 +100,18 @@ export interface T212SimulationResult {
   totalReturn: number
   dividendTaxRate: number
 }
+
+export interface AccountDividendPayment {
+  ticker: string
+  companyName: string
+  paidOn: string
+  amount: number
+  grossAmountPerShare: number
+  quantity: number
+}
+
+export interface AccountDividendSummary {
+  totalPaid: number
+  paidThisYear: number
+  recentPayments: AccountDividendPayment[]
+}

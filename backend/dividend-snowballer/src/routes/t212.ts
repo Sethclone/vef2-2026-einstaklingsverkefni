@@ -3,6 +3,7 @@ import * as t212 from '../lib/trading212.js'
 import { getDividendYieldPct, getDividendGrowthRate as finnhubDGR } from '../lib/finnhub.js'
 import { getTaxRate, countryFromTicker } from '../lib/taxRates.js'
 import { runSimulation } from '../lib/simulation.js'
+import type { AccountDividendSummary } from '../lib/trading212.js'
 
 const t212Routes = new Hono()
 
@@ -232,6 +233,18 @@ t212Routes.post('/simulate', async (c) => {
     return c.json({ data: { ...result, dividendTaxRate: Math.round(weightedTaxRate * 10000) / 100 } })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Simulation failed'
+    return c.json({ error: message }, 500)
+  }
+})
+
+// ─── GET /api/t212/dividends ──────────────────────────────────────────────────
+// Returns total dividends received all-time and year-to-date.
+t212Routes.get('/dividends', async (c) => {
+  try {
+    const summary: AccountDividendSummary = await t212.getAccountDividends()
+    return c.json({ data: summary })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch dividend history'
     return c.json({ error: message }, 500)
   }
 })

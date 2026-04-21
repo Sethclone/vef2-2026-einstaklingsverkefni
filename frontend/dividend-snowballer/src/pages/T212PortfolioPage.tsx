@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, formatCurrency, formatPercent } from '../lib/api'
 import type { T212Portfolio, T212PortfolioItem, AccountDividendSummary } from '../types'
+import { useSortable } from '../hooks/useSortable'
+
+type Col = 'symbol' | 'companyName' | 'shares' | 'avgCostBasis' | 'currentPrice' | 'currentValue' | 'unrealizedPL' | 'annualDividendPerShare' | 'dividendYield' | 'dividendTaxRate'
+
+function SortTh({ col, ind, toggle, className, children }: {
+  col: Col; ind: (k: Col) => string; toggle: (k: Col) => void; className?: string; children: React.ReactNode
+}) {
+  return (
+    <th className={className} onClick={() => toggle(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {children}{ind(col)}
+    </th>
+  )
+}
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
@@ -19,6 +32,12 @@ export default function T212PortfolioPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  // Hook must be called unconditionally, before any early returns
+  const { sorted: sortedPositions, indicator, toggle } = useSortable<Col, T212PortfolioItem>(
+    portfolio?.positions ?? [],
+    (row, key) => row[key] as string | number,
+  )
 
   useEffect(() => {
     api.t212.portfolio()
@@ -70,20 +89,20 @@ export default function T212PortfolioPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Company</th>
-              <th className="text-right">Shares</th>
-              <th className="text-right">Avg Cost</th>
-              <th className="text-right">Price</th>
-              <th className="text-right">Value</th>
-              <th className="text-right">P&L</th>
-              <th className="text-right">Div/Share</th>
-              <th className="text-right">Yield</th>
-              <th className="text-right">Tax Rate</th>
+              <SortTh col="symbol" ind={indicator} toggle={toggle}>Symbol</SortTh>
+              <SortTh col="companyName" ind={indicator} toggle={toggle}>Company</SortTh>
+              <SortTh col="shares" ind={indicator} toggle={toggle} className="text-right">Shares</SortTh>
+              <SortTh col="avgCostBasis" ind={indicator} toggle={toggle} className="text-right">Avg Cost</SortTh>
+              <SortTh col="currentPrice" ind={indicator} toggle={toggle} className="text-right">Price</SortTh>
+              <SortTh col="currentValue" ind={indicator} toggle={toggle} className="text-right">Value</SortTh>
+              <SortTh col="unrealizedPL" ind={indicator} toggle={toggle} className="text-right">P&amp;L</SortTh>
+              <SortTh col="annualDividendPerShare" ind={indicator} toggle={toggle} className="text-right">Div/Share</SortTh>
+              <SortTh col="dividendYield" ind={indicator} toggle={toggle} className="text-right">Yield</SortTh>
+              <SortTh col="dividendTaxRate" ind={indicator} toggle={toggle} className="text-right">Tax Rate</SortTh>
             </tr>
           </thead>
           <tbody>
-            {portfolio.positions.map((pos: T212PortfolioItem) => (
+            {sortedPositions.map((pos: T212PortfolioItem) => (
               <tr key={pos.ticker}>
                 <td><span className="symbol-badge">{pos.symbol}</span></td>
                 <td>{pos.companyName}</td>

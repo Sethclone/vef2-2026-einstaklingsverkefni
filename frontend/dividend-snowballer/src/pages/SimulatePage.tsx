@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   AreaChart, Area, BarChart, Bar,
@@ -48,6 +48,18 @@ export default function SimulatePage() {
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadingSuggested, setLoadingSuggested] = useState(true)
+  const [usedSuggested, setUsedSuggested] = useState(false)
+
+  useEffect(() => {
+    api.suggestParams(portfolioId)
+      .then(s => {
+        setParams(p => ({ ...p, growthRate: s.suggestedGrowthRate, dividendGrowthRate: s.suggestedDividendGrowthRate }))
+        setUsedSuggested(true)
+      })
+      .catch(() => { /* silently fall back to defaults */ })
+      .finally(() => setLoadingSuggested(false))
+  }, [portfolioId])
 
   const set = <K extends keyof SimulationParams>(key: K, value: SimulationParams[K]) =>
     setParams(p => ({ ...p, [key]: value }))
@@ -72,7 +84,7 @@ export default function SimulatePage() {
       <div className="page-header">
         <div>
           <div className="breadcrumb">
-            <Link to="/">Portfolios</Link> / <Link to={`/portfolio/${portfolioId}`}>Portfolio</Link> / Simulate
+            <Link to="/sandbox">Sandbox</Link> / <Link to={`/sandbox/portfolio/${portfolioId}`}>Portfolio</Link> / Simulate
           </div>
           <h1>Snowball Simulator</h1>
           <p className="text-muted">Set assumptions and see how your portfolio could grow with dividend reinvestment.</p>
@@ -83,6 +95,8 @@ export default function SimulatePage() {
         {/* Parameters form */}
         <div className="sim-params card">
           <h2>Parameters</h2>
+          {loadingSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Estimating rates from historical data…</p>}
+          {!loadingSuggested && usedSuggested && <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>✦ Rates pre-filled from historical data. You can adjust them below.</p>}
           <form onSubmit={handleRun} className="form">
             <div className="form-group">
               <label htmlFor="s-years">Time horizon (years)</label>

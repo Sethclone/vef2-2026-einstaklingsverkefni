@@ -1,4 +1,4 @@
-import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote } from '../types'
+import type { Portfolio, Holding, SimulationParams, SimulationResult, StockQuote, SuggestedParams, T212Portfolio, T212SimulationResult } from '../types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
@@ -58,6 +58,21 @@ export const api = {
   stocks: {
     quote: (symbol: string) => request<StockQuote>(`/api/stocks/${symbol}/quote`),
   },
+
+  t212: {
+    portfolio: () => request<T212Portfolio>('/api/t212/portfolio'),
+
+    suggestParams: () => request<SuggestedParams>('/api/t212/suggested-params'),
+
+    simulate: (params: Omit<SimulationParams, never>) =>
+      request<T212SimulationResult>('/api/t212/simulate', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  },
+
+  suggestParams: (portfolioId: number) =>
+    request<SuggestedParams>(`/api/portfolios/${portfolioId}/suggested-params`),
 
   simulate: (portfolioId: number, params: SimulationParams) =>
     request<SimulationResult>(`/api/portfolios/${portfolioId}/simulate`, {

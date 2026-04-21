@@ -72,7 +72,7 @@ export default function PortfoliosPage() {
       ) : (
         <div className="portfolio-grid">
           {portfolios.map(p => (
-            <div key={p.id} className="portfolio-card" onClick={() => navigate(`/portfolio/${p.id}`)}>
+            <div key={p.id} className="portfolio-card" onClick={() => navigate(`/sandbox/portfolio/${p.id}`)}>
               <div className="portfolio-card-header">
                 <h2>{p.name}</h2>
                 <span className="badge">{p._count?.holdings ?? 0} holdings</span>

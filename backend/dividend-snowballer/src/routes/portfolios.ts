@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { prisma } from '../db/prisma.js'
-import { getQuote, getAnnualDividend } from '../lib/alphaVantage.js'
+import { getQuote, getAnnualDividend, getDividendGrowthRate, getStockGrowthRate } from '../lib/finnhub.js'
 import { runSimulation } from '../lib/simulation.js'
 
 const portfolios = new Hono()
@@ -131,6 +131,39 @@ portfolios.delete('/:id/holdings/:hid', async (c) => {
 
 // ─── Simulation ───────────────────────────────────────────────────────────────
 
+// GET /api/portfolios/:id/suggested-params
+// Returns portfolio-weighted average growth & dividend growth rates from historical data.
+portfolios.get('/:id/suggested-params', async (c) => {
+  const portfolioId = parseInt(c.req.param('id'))
+  if (isNaN(portfolioId)) return c.json({ error: 'invalid portfolio id' }, 400)
+
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { id: portfolioId },
+    include: { holdings: true },
+  })
+  if (!portfolio) return c.json({ error: 'portfolio not found' }, 404)
+  if (portfolio.holdings.length === 0) return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
+
+  const results = await Promise.allSettled(
+    portfolio.holdings.map(async h => ({
+      growthRate: await getStockGrowthRate(h.symbol),
+      dividendGrowthRate: await getDividendGrowthRate(h.symbol),
+    }))
+  )
+
+  const fulfilled = results
+    .filter((r): r is PromiseFulfilledResult<{ growthRate: number; dividendGrowthRate: number }> => r.status === 'fulfilled')
+    .map(r => r.value)
+
+  if (fulfilled.length === 0) return c.json({ data: { suggestedGrowthRate: 7, suggestedDividendGrowthRate: 3 } })
+
+  const avg = (arr: number[]) => Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10
+  const suggestedGrowthRate = avg(fulfilled.map(r => r.growthRate))
+  const suggestedDividendGrowthRate = avg(fulfilled.map(r => r.dividendGrowthRate))
+
+  return c.json({ data: { suggestedGrowthRate, suggestedDividendGrowthRate } })
+})
+
 // POST /api/portfolios/:id/simulate
 portfolios.post('/:id/simulate', async (c) => {
   const portfolioId = parseInt(c.req.param('id'))
@@ -172,6 +205,13 @@ portfolios.post('/:id/simulate', async (c) => {
   const enrichedHoldings: EnrichedHolding[] = fetched
     .filter((r): r is PromiseFulfilledResult<EnrichedHolding> => r.status === 'fulfilled')
     .map(r => r.value)
+
+  // Log any failures so they're visible in the server console
+  fetched.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[simulate] Failed to fetch data for ${portfolio.holdings[i]?.symbol}:`, r.reason)
+    }
+  })
 
   if (enrichedHoldings.length === 0) {
     return c.json({ error: 'Could not fetch market data for any holdings. Check your API key or try again later.' }, 502)

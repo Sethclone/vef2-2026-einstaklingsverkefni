@@ -140,14 +140,14 @@ export default function PortfolioDetailPage() {
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="breadcrumb"><Link to="/">Portfolios</Link> / {portfolio?.name}</div>
+          <div className="breadcrumb"><Link to="/sandbox">Sandbox</Link> / {portfolio?.name}</div>
           <h1>{portfolio?.name}</h1>
           {portfolio?.description && <p className="text-muted">{portfolio.description}</p>}
         </div>
         <div className="header-actions">
           <button className="btn btn-ghost btn-sm" onClick={handleDeletePortfolio}>Delete Portfolio</button>
           {(portfolio?.holdings?.length ?? 0) > 0 && (
-            <Link to={`/portfolio/${portfolioId}/simulate`} className="btn btn-primary">
+            <Link to={`/sandbox/portfolio/${portfolioId}/simulate`} className="btn btn-primary">
               Run Simulation →
             </Link>
           )}

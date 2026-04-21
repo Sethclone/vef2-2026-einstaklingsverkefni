@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import portfolios from './routes/portfolios.js'
 import stocks from './routes/stocks.js'
+import t212Routes from './routes/t212.js'
 
 const app = new Hono()
 
@@ -20,6 +21,7 @@ app.get('/api/health', (c) =>
 
 app.route('/api/portfolios', portfolios)
 app.route('/api/stocks', stocks)
+app.route('/api/t212', t212Routes)
 
 app.get('/', (c) => c.text('Dividend Snowballer API'))
 

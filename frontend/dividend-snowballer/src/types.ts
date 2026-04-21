@@ -40,6 +40,7 @@ export interface SimulationParams {
   dividendGrowthRate: number
   drip: boolean
   additionalAnnualInvestment: number
+  dividendTaxRate?: number
 }
 
 export interface YearResult {

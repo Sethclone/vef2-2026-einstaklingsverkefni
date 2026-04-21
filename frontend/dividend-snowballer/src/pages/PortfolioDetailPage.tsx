@@ -122,7 +122,7 @@ export default function PortfolioDetailPage() {
     if (!confirm(`Delete portfolio "${portfolio?.name}"? This cannot be undone.`)) return
     try {
       await api.portfolios.delete(portfolioId)
-      navigate('/')
+      navigate('/sandbox')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete portfolio')
     }

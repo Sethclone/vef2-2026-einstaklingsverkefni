@@ -137,6 +137,29 @@ export async function getAnnualDividend(symbol: string): Promise<number> {
   return m.dividendPerShareAnnual ?? m.dividendPerShareTTM ?? 0
 }
 
+/**
+ * Returns the dividend yield as a percentage (e.g. 2.5 = 2.5%).
+ * Primary: Finnhub's dividendYieldNormalized (often null on free tier).
+ * Fallback: dividendPerShareAnnual / native-currency quote price × 100.
+ *           Both values are in the stock's native currency, so this is accurate.
+ */
+export async function getDividendYieldPct(symbol: string): Promise<number> {
+  const m = await getMetrics(symbol)
+
+  if (m.dividendYieldNormalized != null && m.dividendYieldNormalized > 0) {
+    return m.dividendYieldNormalized
+  }
+
+  // Fallback: compute from annual DPS / native price
+  const dps = m.dividendPerShareAnnual ?? m.dividendPerShareTTM
+  if (dps == null || dps <= 0) return 0
+
+  const quote = await getQuote(symbol).catch(() => null)
+  if (!quote || quote.price <= 0) return 0
+
+  return (dps / quote.price) * 100
+}
+
 export async function getDividendGrowthRate(symbol: string): Promise<number> {
   const m = await getMetrics(symbol)
   // dividendGrowthRate5Y is in percent (e.g. 5.2 means 5.2%)

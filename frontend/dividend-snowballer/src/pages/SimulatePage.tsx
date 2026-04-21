@@ -13,6 +13,7 @@ const DEFAULT_PARAMS: SimulationParams = {
   dividendGrowthRate: 3,
   drip: true,
   additionalAnnualInvestment: 0,
+  dividendTaxRate: 15,
 }
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
@@ -138,6 +139,16 @@ export default function SimulatePage() {
               <span className="form-hint">Extra cash invested each year (optional)</span>
             </div>
 
+            <div className="form-group">
+              <label htmlFor="s-tax">Dividend withholding tax (%)</label>
+              <input
+                id="s-tax" type="number" min={0} max={50} step={0.1}
+                value={params.dividendTaxRate ?? 15}
+                onChange={e => set('dividendTaxRate', parseFloat(e.target.value))}
+              />
+              <span className="form-hint">e.g. 15% for US stocks (W-8BEN), 0% if exempt</span>
+            </div>
+
             <div className="form-group form-group-check">
               <label className="checkbox-label">
                 <input
@@ -171,7 +182,7 @@ export default function SimulatePage() {
               <div className="stats-row four-col">
                 <StatCard label="Initial Value" value={formatCurrency(result.initialValue)} />
                 <StatCard label="Final Value" value={formatCurrency(result.finalValue)} accent />
-                <StatCard label="Total Dividends" value={formatCurrency(result.totalDividendsEarned)} sub="earned over period" />
+                <StatCard label="After-Tax Dividends" value={formatCurrency(result.totalDividendsEarned)} sub="earned over period" />
                 <StatCard label="Total Return" value={formatPercent(result.totalReturn, 1)} sub={`over ${params.years} years`} accent={result.totalReturn > 0} />
               </div>
 
@@ -210,7 +221,8 @@ export default function SimulatePage() {
                     <XAxis dataKey="year" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
                     <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="annualDividends" name="Annual Dividends" fill="#4ade80" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="annualDividends" name="Gross Dividends" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="afterTaxDividends" name="After-Tax Dividends" fill="#4ade80" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -224,7 +236,8 @@ export default function SimulatePage() {
                       <tr>
                         <th>Year</th>
                         <th className="num">Portfolio Value</th>
-                        <th className="num">Annual Dividends</th>
+                        <th className="num">Gross Dividends</th>
+                        <th className="num">After-Tax Divs</th>
                         <th className="num">Cumulative Dividends</th>
                         <th className="num">Dividend Yield</th>
                         <th className="num">Total Shares</th>
@@ -235,7 +248,8 @@ export default function SimulatePage() {
                         <tr key={r.year}>
                           <td>{r.year}</td>
                           <td className="num">{formatCurrency(r.portfolioValue)}</td>
-                          <td className="num positive">{formatCurrency(r.annualDividends)}</td>
+                          <td className="num">{formatCurrency(r.annualDividends)}</td>
+                          <td className="num positive">{formatCurrency(r.afterTaxDividends)}</td>
                           <td className="num">{formatCurrency(r.cumulativeDividends)}</td>
                           <td className="num">{r.dividendYield.toFixed(2)}%</td>
                           <td className="num">{r.totalShares.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>

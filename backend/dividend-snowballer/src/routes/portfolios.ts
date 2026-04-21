@@ -178,7 +178,7 @@ portfolios.post('/:id/simulate', async (c) => {
 
   const body = await c.req.json<{
     years?: number; growthRate?: number; dividendGrowthRate?: number;
-    drip?: boolean; additionalAnnualInvestment?: number
+    drip?: boolean; additionalAnnualInvestment?: number; dividendTaxRate?: number
   }>()
 
   const years = Math.round(Number(body.years ?? 10))
@@ -186,6 +186,7 @@ portfolios.post('/:id/simulate', async (c) => {
   const dividendGrowthRate = Number(body.dividendGrowthRate ?? 3)
   const drip = body.drip !== false
   const additionalAnnualInvestment = Number(body.additionalAnnualInvestment ?? 0)
+  const dividendTaxRate = typeof body.dividendTaxRate === 'number' ? body.dividendTaxRate / 100 : 0
 
   if (years < 1 || years > 50) return c.json({ error: 'years must be between 1 and 50' }, 400)
   if (growthRate < -20 || growthRate > 50) return c.json({ error: 'growthRate must be between -20 and 50' }, 400)
@@ -217,7 +218,7 @@ portfolios.post('/:id/simulate', async (c) => {
     return c.json({ error: 'Could not fetch market data for any holdings. Check your API key or try again later.' }, 502)
   }
 
-  const results = runSimulation({ holdings: enrichedHoldings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment })
+  const results = runSimulation({ holdings: enrichedHoldings, years, growthRate, dividendGrowthRate, drip, additionalAnnualInvestment, dividendTaxRate })
 
   const sim = await prisma.simulation.create({
     data: { portfolioId, years, growthRate, dividendGrowthRate, drip, results: results as object },
